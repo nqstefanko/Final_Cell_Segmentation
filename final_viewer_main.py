@@ -41,15 +41,20 @@ import pandas as pd
 import pathlib
 import traceback
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
 from segmentation_utils import print_colored, napari_viewer_parser
 
-napari_viewer_parser_args = napari_viewer_parser.parse_args()
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 LUTs = ['blue', 'cyan', 'gray', 'green', 'magenta', 'red', 'yellow']
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 # hardcoded channel names because the CZIs only have the marked names
-channel_names = ['CD163', 'CD3', 'CD4', 'CD8', 'DAPI', 'HLADR', 'PDL1', 'PanCK', 'XCR1']
+all_channels = [
+    ['CD163', 'CD3', 'CD4', 'CD8', 'DAPI', 'HLADR', 'PDL1', 'PanCK', 'XCR1']
+]
+DEFAULT_CHANNELs_TO_USE = 0
+
+channel_names = all_channels[DEFAULT_CHANNELs_TO_USE]
 
 cell_type_col = False
 
@@ -59,6 +64,43 @@ threshold_dict = {}
 for c in channel_names:
     threshold_dict[c] = 0.0
 
+#Using argument parser to organize the input
+napari_viewer_parser.add_argument("--channel", "-c", dest='channel', action="store_true",
+                    help="View, Select, and Add Channels!")
+
+napari_viewer_parser_args = napari_viewer_parser.parse_args()
+
+if napari_viewer_parser_args.debug:
+    DEBUG = True
+
+#Gets proper channels from above for tiling
+def get_channel_choice(len_of_channels):
+    while True:
+        try:
+            number = int(input('Chose an option from menu: '))
+            if 0 < number <= len_of_channels:
+                return number
+            else:
+                raise ValueError("Not in valid number range!")
+        except Exception as  e:
+            print_colored("red", f"Invalid channel choice! {e}")
+
+if napari_viewer_parser_args.channel:
+    print_colored("cyan", f"Select which channels you would like to use. Optionally, use your own. (Note: Current Default is option {DEFAULT_CHANNELs_TO_USE})")
+
+    print_colored("green", f"CHANNEL CHOICES")
+    for index, channel in enumerate(all_channels):
+        print_colored("green", f"[{index}] {channel}")
+    print_colored("green", f"[{len(all_channels)}] Input Custom Channels")
+    choices = list(range(0, len(all_channels) + 1))
+
+    num_to_use = get_channel_choice(len(all_channels))
+
+    if(num_to_use < len(all_channels)):
+        channels_to_use = all_channels[num_to_use]
+    else:
+        print_colored("cyan", f"Type each channel out separated by a comma, and custom channels will be created. (No trailing comma!)")
+        channels_to_use = input("Give Channels: ").replace(" ", "").split(',')
 
 @magicgui(
     # call_button connects to save method
@@ -89,7 +131,7 @@ from aicsimageio import AICSImage
 
 @threshold_widget.czi_image_filename.changed.connect
 def load_new_image(value: str):
-    #TODO: Make small tiff files viewable, and integrate with imagej/fiji
+    #TODO: Make large tiff files viewable, and integrate with imagej/fiji
     contrast_limits = []
 
     czi_file = aicspylibczi.CziFile(value)
@@ -113,6 +155,8 @@ def load_new_image(value: str):
 
 @threshold_widget.cell_data_filename.changed.connect
 def load_cell_data(cell_data_file_path: str):
+    #TODO: Keep track of number points and output to napari
+
     # clear old points data
     if ('points' in viewer.layers):
         del viewer.layers['points']
@@ -290,9 +334,7 @@ def get_boundaries(boundaries_file_path):
         print(traceback.format_exc())
         return
 
-
     #Need to get czi dimensions to properly stitch boundaries together
-
 
     final_concat = None
     for i in range(rows):

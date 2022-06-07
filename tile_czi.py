@@ -42,7 +42,6 @@ import tifffile as tf
 
 import os
 
-
 DEBUG = False #Used to output additional infomation when the czi is being filed
 TILE_SIZE = 2048 # Using this tile size because it is the largest that can be done
 DEFAULT_CHANNELs_TO_USE = 1
