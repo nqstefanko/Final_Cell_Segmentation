@@ -48,21 +48,15 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 LUTs = ['blue', 'cyan', 'gray', 'green', 'magenta', 'red', 'yellow']
 CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
 
-# hardcoded channel names because the CZIs only have the marked names
 all_channels = [
-    ['CD163', 'CD3', 'CD4', 'CD8', 'DAPI', 'HLADR', 'PDL1', 'PanCK', 'XCR1']
+    ['DAPI','HLADR','CD8','CD163','CD4','XCR1','CD3','PDL1','EPCAM'],
+    ['DAPI','HLADR','CD8','CD163','CD4','XCR1','CD3','PDL1','PanCK']
 ]
-DEFAULT_CHANNELs_TO_USE = 0
+DEFAULT_CHANNELS_TO_USE = 1
 
-channel_names = all_channels[DEFAULT_CHANNELs_TO_USE]
+channel_names = all_channels[DEFAULT_CHANNELS_TO_USE]
 
 cell_type_col = False
-
-# initialize dictionary to store thresholds for each channel
-threshold_dict = {}
-
-for c in channel_names:
-    threshold_dict[c] = 0.0
 
 #Using argument parser to organize the input
 napari_viewer_parser.add_argument("--channel", "-c", dest='channel', action="store_true",
@@ -78,7 +72,7 @@ def get_channel_choice(len_of_channels):
     while True:
         try:
             number = int(input('Chose an option from menu: '))
-            if 0 < number <= len_of_channels:
+            if 0 <= number <= len_of_channels:
                 return number
             else:
                 raise ValueError("Not in valid number range!")
@@ -86,7 +80,7 @@ def get_channel_choice(len_of_channels):
             print_colored("red", f"Invalid channel choice! {e}")
 
 if napari_viewer_parser_args.channel:
-    print_colored("cyan", f"Select which channels you would like to use. Optionally, use your own. (Note: Current Default is option {DEFAULT_CHANNELs_TO_USE})")
+    print_colored("cyan", f"Select which channels you would like to use. Optionally, use your own. (Note: Current Default is option {DEFAULT_CHANNELS_TO_USE})")
 
     print_colored("green", f"CHANNEL CHOICES")
     for index, channel in enumerate(all_channels):
@@ -97,10 +91,16 @@ if napari_viewer_parser_args.channel:
     num_to_use = get_channel_choice(len(all_channels))
 
     if(num_to_use < len(all_channels)):
-        channels_to_use = all_channels[num_to_use]
+        channel_names = all_channels[num_to_use]
     else:
         print_colored("cyan", f"Type each channel out separated by a comma, and custom channels will be created. (No trailing comma!)")
-        channels_to_use = input("Give Channels: ").replace(" ", "").split(',')
+        channel_names = input("Give Channels: ").replace(" ", "").split(',')
+
+# initialize dictionary to store thresholds for each channel
+threshold_dict = {}
+
+for c in channel_names:
+    threshold_dict[c] = 0.0
 
 @magicgui(
     # call_button connects to save method
@@ -140,7 +140,6 @@ def load_new_image(value: str):
     #Clears out old channel values when a new image is loaded using widget gui
     while(len(viewer.layers) != 0):
         viewer.layers.pop()
-
     #Add each channel img to layers with associated name
     for index, channel_name in enumerate(channel_names):
         print_colored("cyan", f"Loading channel {index} - {channel_name}")
@@ -152,6 +151,8 @@ def load_new_image(value: str):
         viewer.layers[channel_name].opacity = 1.0
         viewer.layers[channel_name].blending = 'additive'
         viewer.layers[channel_name].interpolation = 'gaussian'
+
+    threshold_widget.marker.set_choice('Tumor',channel_names[-1])
 
 @threshold_widget.cell_data_filename.changed.connect
 def load_cell_data(cell_data_file_path: str):
@@ -216,6 +217,11 @@ def threshold_slider_change(value: float):
 @threshold_widget.threshold_value.changed.connect
 def threshold_value_changed(value: float):
     threshold_widget.threshold_slider.value = value
+
+@threshold_widget.marker.changed.connect
+def marker_changed(value: str):
+    threshold_widget.threshold_value.value = threshold_dict[value]
+    threshold_widget.threshold_slider.value = threshold_dict[value]
 
 @threshold_widget.call_button.clicked.connect
 def save():
@@ -309,7 +315,7 @@ def update_cell_types():
     viewer.layers['points'].properties = data
 
 @threshold_widget.cell_boundaries_filename.changed.connect
-def get_boundaries(boundaries_file_path):
+def get_boundaries(boundaries_file_path: str):
     segmented_cell_borders_filename = boundaries_file_path.stem.split('-')[-1]
 
     try:
